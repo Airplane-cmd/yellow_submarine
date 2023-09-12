@@ -1,7 +1,7 @@
 // C library headers
 #include <stdio.h>
 #include <string.h>
-
+//#include <iostream>
 // Linux headers
 #include <fcntl.h> // Contains file controls like O_RDWR
 #include <errno.h> // Error integer and strerror() function
@@ -10,6 +10,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
+#include <string>
 using std::placeholders::_1;
 class Rover : public rclcpp::Node
 {
@@ -18,14 +19,23 @@ class Rover : public rclcpp::Node
     void topic_callback(const std_msgs::msg::String &msg) const
     {
       RCLCPP_INFO(this->get_logger(), "Reeived: '%s'", msg.data.c_str());
-      write(serial_port, msg.data.c_str(), sizeof(msg.data.c_str()));
+      std::string command = msg.data.c_str();
+      std::string prefix = {char(45), char(230)};
+      command.insert(0, prefix);
+      command += '\n';
+      RCLCPP_INFO(this->get_logger(), "Sending to ttyUSB0: '%s' with size of ", command.c_str());
+      std::cout << sizeof(command.c_str()) << '\n';
+//      msg.data += std::string("\n");
+      write(serial_port, command.c_str(), command.size());
     }
     int serial_port;
     struct termios tty;
   public:
     Rover() : Node("rover")
     {
-      serial_port = open("/dev/ttyUSB0", O_RDWR);
+      this->declare_parameter("tty", "/dev/ttyUSB0");
+      std::string tty_str = this->get_parameter("tty").as_string();
+      serial_port = open(tty_str.c_str(), O_RDWR);
       if(serial_port < 0)
       {
 	RCLCPP_INFO(this->get_logger(), "[-] Can't open serial port, exiting with errno '%i'", errno);

@@ -10,15 +10,21 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
+
 #include <string>
+#include <vector>
+#include <sstream>
+
 using std::placeholders::_1;
 class Rover : public rclcpp::Node
 {
   private:
+    bool debug_f = 0;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_full;
     void topic_callback(const std_msgs::msg::String &msg) const
     {
-      RCLCPP_INFO(this->get_logger(), "Reeived: '%s'", msg.data.c_str());
+      RCLCPP_INFO(this->get_logger(), "Received: '%s'", msg.data.c_str());
       std::string command = msg.data.c_str();
       std::string prefix = {char(45), char(230)};
       command.insert(0, prefix);
@@ -26,24 +32,57 @@ class Rover : public rclcpp::Node
       RCLCPP_INFO(this->get_logger(), "Sending to ttyUSB0: '%s' with size of ", command.c_str());
       std::cout << sizeof(command.c_str()) << '\n';
 //      msg.data += std::string("\n");
-      write(serial_port, command.c_str(), command.size());
+      if(!debug_f)	write(serial_port, command.c_str(), command.size());
+    }
+    void topic_callback_with_parsing(const std_msgs::msg::String &msg) const
+    {
+      RCLCPP_INFO(this->get_logger(), "Received: '%s'", msg.data.c_str());
+      std::string command = msg.data.c_str();
+      std::string prefix = {char(45), char(230)};
+      std::vector<int> values;
+      std::stringstream ss(command);
+      int value;
+      while(ss >> value)
+      {
+        values.push_back(value);
+        if(ss.peek() == ' ')	ss.ignore();
+      }
+//	std::cout << "command after ss " << command << '\n';
+      command.clear();
+      command += prefix;
+      for(int it : values)	command.push_back(char(it));
+      command.push_back('\n');
+      std::cout << "bytes: ";
+      for(uint8_t it : values)	std::cout << int(it) << ' ';
+      std::cout << '\n';
+      RCLCPP_INFO(this->get_logger(), "Sending to ttyUSB0: '%s' with size of %s", command.c_str(), std::to_string(command.size()).c_str());
+      if(!debug_f)	write(serial_port, command.c_str(), command.size());
+
     }
     int serial_port;
     struct termios tty;
   public:
     Rover() : Node("rover")
     {
+      subscription_ = this->create_subscription<std_msgs::msg::String>("navigation_topic", 10, std::bind(&Rover::topic_callback, this, _1));
+      subscription_full = this->create_subscription<std_msgs::msg::String>("hr_topic", 10, std::bind(&Rover::topic_callback_with_parsing, this, _1));
+
+      this->declare_parameter("debug", "Nope");
+      std::string debugStatus_str= this->get_parameter("debug").as_string();
+      debug_f = ((debugStatus_str == "Yez") ? 1 : 0);
+      if(debug_f)	RCLCPP_INFO(this->get_logger(), "[!] Node spinnig in debug mode, serial is unavailable");
+
       this->declare_parameter("tty", "/dev/ttyUSB0");
       std::string tty_str = this->get_parameter("tty").as_string();
       serial_port = open(tty_str.c_str(), O_RDWR);
-      if(serial_port < 0)
+      if(serial_port < 0 && !debug_f)
       {
 	RCLCPP_INFO(this->get_logger(), "[-] Can't open serial port, exiting with errno '%i'", errno);
 	rclcpp::shutdown();
       }
       else	RCLCPP_INFO(this->get_logger(), "[+]");
 
-      if(tcgetattr(serial_port, &tty) != 0) 
+      if(tcgetattr(serial_port, &tty) != 0 && !debug_f) 
       {
 	RCLCPP_INFO(this->get_logger(), "[-] Tcgetattr error, exiting with errno '%i'", errno);
 	rclcpp::shutdown();
@@ -78,14 +117,13 @@ class Rover : public rclcpp::Node
       cfsetospeed(&tty, B9600);
 
   // Save tty settings, also checking for error
-      if (tcsetattr(serial_port, TCSANOW, &tty) != 0) 
+      if (tcsetattr(serial_port, TCSANOW, &tty) != 0 && !debug_f) 
       {
 	RCLCPP_INFO(this->get_logger(), "[-] Tcgetattr error, exiting with errno '%i'", errno);
 	rclcpp::shutdown();
       }
       else	RCLCPP_INFO(this->get_logger(), "[+]");
 
-      subscription_ = this->create_subscription<std_msgs::msg::String>("navigation_topic", 10, std::bind(&Rover::topic_callback, this, _1));
     }
 };  
 int main(int argc, char **argv)

@@ -11,11 +11,12 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
-
+#include "geometry_msgs/msg/twist.hpp"
 
 
 #include <string>
@@ -35,11 +36,13 @@ class Rover : public rclcpp::Node
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_full;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr vo_pose;
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr subscription_cmd_vel;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr subscription_follow;
 
     std::array<double, 3> m_position;
     std::array<double, 3> m_rotation;
-    std::array<double, 3> m_positionGoal_arr;
-    std::array<double, 3> m_rotationGoal_arr;
+//    std::array<double, 3> m_positionGoal_arr;
+//    std::array<double, 3> m_rotationGoal_arr;
 
     void topic_callback(const std_msgs::msg::String &msg) const
     {
@@ -116,7 +119,31 @@ class Rover : public rclcpp::Node
       
       sendString(prefix, command_str);
     }
-    
+    void cmd_vel_callback(const geometry_msgs::msg::Twist &msg)
+    {
+      std::vector<double> double_vctr;
+      double_vctr.push_back(msg.linear.x);
+      double_vctr.push_back(msg.angular.z);
+      sendString(std::string(char(45), char(232)), doublesToString(double_vctr));
+      
+    }
+    void follow_callback(const std_msgs::msg::Bool &msg)  
+    {
+      char byte = (!msg.data) ? '0' : '1';
+      sendString(std::string(char(45), char(233)), {byte});
+    }
+    std::string doublesToString(const std::vector<double> &double_vctr) const
+    {
+      std::string command_str;
+      for(uint8_t i = 0; i < command_str.size(); ++i)
+      {
+	float float_ = static_cast<float>(double_vctr[i]);
+	char buff[4];
+	memcpy(buff, &float_, 4);
+	command_str += std::string(buff, 4);
+      }
+      return command_str;
+    }
     void sendString(const std::string &prefix, const std::string &data)
     {
       std::string command = prefix + data + '\n';
@@ -128,8 +155,8 @@ class Rover : public rclcpp::Node
     {
       subscription_ = this->create_subscription<std_msgs::msg::String>("navigation_topic", 10, std::bind(&Rover::topic_callback, this, _1));
       subscription_full = this->create_subscription<std_msgs::msg::String>("hr_topic", 10, std::bind(&Rover::topic_callback_with_parsing, this, _1));
-      vo_pose = this->create_subscription<geometry_msgs::msg::PoseStamped>("/visual_slam/tracking/vo_pose", 10, std::bind(&Rover::topic_callback_getRPY, this, _1));
-
+//      vo_pose = this->create_subscription<geometry_msgs::msg::PoseStamped>("/visual_slam/tracking/vo_pose", 10, std::bind(&Rover::topic_callback_getRPY, this, _1));
+      subscription_cmd_vel = this->create_subscription<geometry_msgs::msg::Twist>("/cmd_vel", 10, std::bind(&Rover::cmd_vel_callback, this, _1));
       this->declare_parameter("debug", "Nope");
       std::string debugStatus_str= this->get_parameter("debug").as_string();
       debug_f = ((debugStatus_str == "Yez") ? 1 : 0);

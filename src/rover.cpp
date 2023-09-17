@@ -56,7 +56,7 @@ class Rover : public rclcpp::Node
 //      msg.data += std::string("\n");
       if(!debug_f)	write(serial_port, command.c_str(), command.size());
     }
-    void topic_callback_with_parsing(const std_msgs::msg::String &msg) const
+    void topic_callback_with_parsing(const std_msgs::msg::String &msg)
     {
       RCLCPP_INFO(this->get_logger(), "Received: '%s'", msg.data.c_str());
       std::string command = msg.data.c_str();
@@ -68,18 +68,26 @@ class Rover : public rclcpp::Node
       {
         values.push_back(value);
         if(ss.peek() == ' ')	ss.ignore();
+	if(values.size() == 4)	break;
       }
+      std::string duration_str = command.substr(command.find_last_of(' ') + 1, command.size() - 2);
+      std::vector<double> duration_vctr;
+      duration_vctr.push_back(std::stod(duration_str));
 //	std::cout << "command after ss " << command << '\n';
       command.clear();
       command += prefix;
       for(int it : values)	command.push_back(char(it));
-      command.push_back('\n');
+      std::string cursedFuckingShit = doublesToString(duration_vctr);
+      
+      
+//      command.push_back('\n');
       std::cout << "bytes: ";
       for(uint8_t it : values)	std::cout << int(it) << ' ';
       std::cout << '\n';
       RCLCPP_INFO(this->get_logger(), "Sending to ttyUSB0: '%s' with size of %s", command.c_str(), std::to_string(command.size()).c_str());
-      if(!debug_f)	write(serial_port, command.c_str(), command.size());
-
+      //if(!debug_f)	write(serial_port, command.c_str(), command.size());
+      
+      sendString(command, cursedFuckingShit);
     }
     void topic_callback_getRPY(const geometry_msgs::msg::PoseStamped &msg)
     {
@@ -121,10 +129,13 @@ class Rover : public rclcpp::Node
     }
     void cmd_vel_callback(const geometry_msgs::msg::Twist &msg)
     {
+      RCLCPP_INFO(this->get_logger(), "Received cmd_vel data: \n");
       std::vector<double> double_vctr;
       double_vctr.push_back(msg.linear.x);
       double_vctr.push_back(msg.angular.z);
-      sendString(std::string(char(45), char(232)), doublesToString(double_vctr));
+      for(double it : double_vctr)	std::cout << it << '\n';
+      std::string prefix = {char(45), char(232)};
+      sendString(prefix, doublesToString(double_vctr));
       
     }
     void follow_callback(const std_msgs::msg::Bool &msg)  
@@ -135,7 +146,7 @@ class Rover : public rclcpp::Node
     std::string doublesToString(const std::vector<double> &double_vctr) const
     {
       std::string command_str;
-      for(uint8_t i = 0; i < command_str.size(); ++i)
+      for(uint8_t i = 0; i < double_vctr.size(); ++i)
       {
 	float float_ = static_cast<float>(double_vctr[i]);
 	char buff[4];

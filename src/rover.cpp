@@ -140,8 +140,11 @@ class Rover : public rclcpp::Node
     }
     void follow_callback(const std_msgs::msg::Bool &msg)  
     {
-      char byte = (!msg.data) ? '0' : '1';
-      sendString(std::string(char(45), char(233)), {byte});
+      char byte = (!msg.data) ? 0 : 1;
+      std::string prefix = {char(45), char(233)};
+      std::string data;
+      data += byte;
+      sendString(prefix, data);
     }
     std::string doublesToString(const std::vector<double> &double_vctr) const
     {
@@ -168,6 +171,7 @@ class Rover : public rclcpp::Node
       subscription_full = this->create_subscription<std_msgs::msg::String>("hr_topic", 10, std::bind(&Rover::topic_callback_with_parsing, this, _1));
 //      vo_pose = this->create_subscription<geometry_msgs::msg::PoseStamped>("/visual_slam/tracking/vo_pose", 10, std::bind(&Rover::topic_callback_getRPY, this, _1));
       subscription_cmd_vel = this->create_subscription<geometry_msgs::msg::Twist>("/cmd_vel", 10, std::bind(&Rover::cmd_vel_callback, this, _1));
+      subscription_follow = this->create_subscription<std_msgs::msg::Bool>("/follow_flag", 10, std::bind(&Rover::follow_callback, this, _1));
       this->declare_parameter("debug", "Nope");
       std::string debugStatus_str= this->get_parameter("debug").as_string();
       debug_f = ((debugStatus_str == "Yez") ? 1 : 0);
